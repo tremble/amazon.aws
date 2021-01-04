@@ -1,0 +1,47 @@
+---
+# defaults file for ec2_vpc_dhcp_options
+vpc_name_a: '{{ resource_prefix }}-a'
+vpc_cidr_a: '10.{{ 256 | random(seed=vpc_name_a) }}.0.0/16'
+vpc_name_b: '{{ resource_prefix }}-b'
+vpc_cidr_b: '10.{{ 256 | random(seed=vpc_name_b) }}.0.0/16'
+
+dns_servers_a_1:
+- '10.{{ 256 | random(seed=vpc_name_a) }}.4.4'
+- '10.{{ 256 | random(seed=vpc_name_a) }}.5.4'
+dns_servers_a_2:
+- '10.{{ 256 | random(seed=vpc_name_a) }}.4.5'
+- '10.{{ 256 | random(seed=vpc_name_a) }}.5.5'
+dns_servers_b_1:
+- '10.{{ 256 | random(seed=vpc_name_b) }}.6.6'
+- '10.{{ 256 | random(seed=vpc_name_b) }}.7.6'
+dns_servers_b_2:
+- '10.{{ 256 | random(seed=vpc_name_b) }}.6.7'
+- '10.{{ 256 | random(seed=vpc_name_b) }}.7.7'
+
+domain_a: 'a.{{ resource_prefix }}.test'
+domain_b: 'b.{{ resource_prefix }}.test'
+
+netbios_1:
+- '10.{{ 256 | random(seed=vpc_name_a) }}.8.4'
+- '10.{{ 256 | random(seed=vpc_name_a) }}.9.4'
+netbios_2:
+- '10.{{ 256 | random(seed=vpc_name_a) }}.8.5'
+- '10.{{ 256 | random(seed=vpc_name_a) }}.9.5'
+
+ntp_1:
+- '10.{{ 256 | random(seed=vpc_name_a) }}.10.40'
+- '10.{{ 256 | random(seed=vpc_name_a) }}.10.41'
+ntp_2:
+- '10.{{ 256 | random(seed=vpc_name_a) }}.11.42'
+- '10.{{ 256 | random(seed=vpc_name_a) }}.11.43'
+
+minimal_tags:
+  AnsibleTest: '{{ resource_prefix }}'
+
+# Some of the standard casing varients which hint at issues like things like
+# tags being incorrectly run through camel_dict_to_snake_dict.
+full_tags:
+  "lowercase spaced": 'hello cruel world'
+  "Title Case": 'Hello Cruel World'
+  CamelCase: 'SimpleCamelCase'
+  snake_case: 'simple_snake_case'

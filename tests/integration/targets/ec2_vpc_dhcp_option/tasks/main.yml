@@ -1,0 +1,334 @@
+---
+- module_defaults:
+    group/aws:
+      aws_access_key: '{{ aws_access_key }}'
+      aws_secret_key: '{{ aws_secret_key }}'
+      security_token: '{{ security_token | default(omit) }}'
+      region: '{{ aws_region }}'
+  block:
+
+  ################################################
+  # SETUP STARTS HERE
+  ################################################
+
+  - name: 'Create test VPC A'
+    ec2_vpc_net:
+      name: '{{ vpc_name_a }}'
+      state: present
+      cidr_block: '{{ vpc_cidr_a }}'
+      tags:
+        Description: 'Created by ansible-test'
+    register: vpc_creation_a
+  - assert:
+      that:
+      - vpc_creation_a is successful
+
+  - name: 'Create test VPC B'
+    ec2_vpc_net:
+      name: '{{ vpc_name_b }}'
+      state: present
+      cidr_block: '{{ vpc_cidr_b }}'
+      tags:
+        Description: 'Created by ansible-test'
+    register: vpc_creation_b
+  - assert:
+      that:
+      - vpc_creation_b is successful
+
+  - name: 'Setup facts with initial settings'
+    set_fact:
+      vpc_id_a: '{{ vpc_creation_a.vpc.id }}'
+      original_dhcp_options_a: '{{ vpc_creation_a.vpc.dhcp_options_id }}'
+      vpc_id_b: '{{ vpc_creation_b.vpc.id }}'
+      original_dhcp_options_b: '{{ vpc_creation_b.vpc.dhcp_options_id }}'
+
+  ################################################
+  # TESTS START HERE
+  ################################################
+
+  # Minimal Creation
+
+  - name: 'Create new DHCP Options (Check Mode)'
+    ec2_vpc_dhcp_option:
+      dns_servers: '{{ dns_servers_a_1 }}'
+      domain_name: '{{ domain_a }}'
+      vpc_id: '{{ vpc_id_a }}'
+    check_mode: yes
+    register: minimal_create_check
+  - assert:
+      that:
+      - minimal_create_check is changed
+    # FIXME - check always unchanged
+    ignore_errors: yes
+
+  - name: 'Create new DHCP Options'
+    ec2_vpc_dhcp_option:
+      dns_servers: '{{ dns_servers_a_1 }}'
+      domain_name: '{{ domain_a }}'
+      vpc_id: '{{ vpc_id_a }}'
+    register: minimal_create
+  - assert:
+      that:
+      - minimal_create is changed
+      - '"dhcp_options_id" in minimal_create'
+      - minimal_create.dhcp_options_id.startswith('dopt-')
+      - '"new_options" in minimal_create'
+      - '"domain-name" in minimal_create.new_options'
+      - minimal_create.new_options['domain-name'] == domain_a
+      - '"domain-name-servers" in minimal_create.new_options'
+      - ( minimal_create.new_options['domain-name-servers'] | sort ) == ( dns_servers_a_1 | sort )
+      # These are null and only exist when a new option is created...
+      #- '"netbios-name-servers" in minimal_create.new_options'
+      #- '"netbios-node-type" in minimal_create.new_options'
+
+  - name: 'Create new DHCP Options - Idempotency (Check Mode)'
+    ec2_vpc_dhcp_option:
+      dns_servers: '{{ dns_servers_a_1 }}'
+      domain_name: '{{ domain_a }}'
+      vpc_id: '{{ vpc_id_a }}'
+    check_mode: yes
+    register: minimal_create_idemp_check
+  - assert:
+      that:
+      - minimal_create_idemp_check is not changed
+      - '"dhcp_options_id" in minimal_create_idemp_check'
+      - minimal_create_idemp_check.dhcp_options_id == minimal_create.dhcp_options_id
+      - '"new_options" in minimal_create_idemp_check'
+      # FIXME - list !?!
+      #- '"domain-name" in minimal_create_idemp_check.new_options'
+      - minimal_create_idemp_check.new_options['domain-name'] == domain_a
+      - '"domain-name-servers" in minimal_create_idemp_check.new_options'
+      - ( minimal_create_idemp_check.new_options['domain-name-servers'] | sort ) == ( dns_servers_a_1 | sort )
+    ignore_errors: yes
+
+  - name: 'Create new DHCP Options - Idempotency'
+    ec2_vpc_dhcp_option:
+      dns_servers: '{{ dns_servers_a_1 }}'
+      domain_name: '{{ domain_a }}'
+      vpc_id: '{{ vpc_id_a }}'
+    register: minimal_create_idemp
+  - assert:
+      that:
+      - minimal_create_idemp is not changed
+      - '"dhcp_options_id" in minimal_create_idemp'
+      - minimal_create_idemp.dhcp_options_id == minimal_create.dhcp_options_id
+      - '"new_options" in minimal_create_idemp'
+      - '"domain-name" in minimal_create_idemp.new_options'
+      # FIXME - list !?!
+      # - minimal_create_idemp.new_options['domain-name'] == domain_a
+      - '"domain-name-servers" in minimal_create_idemp.new_options'
+      - ( minimal_create_idemp.new_options['domain-name-servers'] | sort ) == ( dns_servers_a_1 | sort )
+
+  # ----------------------------------------------
+  # Minimal creation of second DHCP Options
+
+  - name: 'Create new DHCP Options (B)'
+    ec2_vpc_dhcp_option:
+      dns_servers: '{{ dns_servers_b_1 }}'
+      domain_name: '{{ domain_b }}'
+      vpc_id: '{{ vpc_id_b }}'
+    register: minimal_create_b
+  - assert:
+      that:
+      - minimal_create_b is changed
+      - '"dhcp_options_id" in minimal_create_b'
+      - minimal_create_b.dhcp_options_id != minimal_create.dhcp_options_id
+      - '"new_options" in minimal_create_b'
+      - '"domain-name" in minimal_create_b.new_options'
+      - minimal_create_b.new_options['domain-name'] == domain_b
+      - '"domain-name-servers" in minimal_create_b.new_options'
+      - ( minimal_create_b.new_options['domain-name-servers'] | sort ) == ( dns_servers_b_1 | sort )
+
+  # Run this after creating the second option set to ensure we only changed the
+  # settings for VPC B
+  - name: 'Ensure that VPC A is using Option set A'
+    ec2_vpc_net_info:
+      vpc_ids: [ '{{ vpc_id_a }}' ]
+    register: vpc_info
+  - assert:
+      that:
+      - vpc_info.vpcs[0].dhcp_options_id == minimal_create.dhcp_options_id
+
+  - name: 'Ensure that VPC B is using Option set B'
+    ec2_vpc_net_info:
+      vpc_ids: [ '{{ vpc_id_b }}' ]
+    register: vpc_info
+  - assert:
+      that:
+      - vpc_info.vpcs[0].dhcp_options_id == minimal_create_b.dhcp_options_id
+
+  # ----------------------------------------------
+  # Reassign DHCP Options by ID
+
+  - name: 'Reassign DHCP Options by ID (Check Mode)'
+    ec2_vpc_dhcp_option:
+      dhcp_options_id: '{{ minimal_create.dhcp_options_id }}'
+      vpc_id: '{{ vpc_id_b }}'
+    register: assign_id_check
+  - assert:
+      that:
+      # FIXME
+      # - assign_id_check is changed
+      - '"dhcp_options_id" in assign_id_check'
+      - assign_id_check.dhcp_options_id == minimal_create.dhcp_options_id
+      # FIXME - missing
+      # - '"new_options" in assign_id_check'
+      # - '"domain-name" in assign_id_check.new_options'
+      # - assign_id_check.new_options['domain-name'] == domain_a
+      # - '"domain-name-servers" in assign_id_check.new_options'
+      # - ( assign_id_check.new_options['domain-name-servers'] | sort ) == ( dns_servers_a_1 | sort )
+
+  - name: 'Reassign DHCP Options by ID'
+    ec2_vpc_dhcp_option:
+      dhcp_options_id: '{{ minimal_create.dhcp_options_id }}'
+      vpc_id: '{{ vpc_id_b }}'
+    register: assign_id
+  - assert:
+      that:
+      - assign_id is changed
+      - '"dhcp_options_id" in assign_id'
+      - assign_id.dhcp_options_id == minimal_create.dhcp_options_id
+      # FIXME - missing
+      # - '"new_options" in assign_id'
+      # - '"domain-name" in assign_id.new_options'
+      # - assign_id.new_options['domain-name'] == domain_a
+      # - '"domain-name-servers" in assign_id.new_options'
+      # - ( assign_id.new_options['domain-name-servers'] | sort ) == ( dns_servers_a_1 | sort )
+
+  - name: 'Ensure that VPC B is using Option set A'
+    ec2_vpc_net_info:
+      vpc_ids: [ '{{ vpc_id_b }}' ]
+    register: vpc_info
+  - assert:
+      that:
+      - vpc_info.vpcs[0].dhcp_options_id == minimal_create.dhcp_options_id
+
+  - name: 'Reassign DHCP Options by ID - Idempotency (Check Mode)'
+    ec2_vpc_dhcp_option:
+      dhcp_options_id: '{{ minimal_create.dhcp_options_id }}'
+      vpc_id: '{{ vpc_id_b }}'
+    register: assign_id_idemp_check
+  - assert:
+      that:
+      # FIXME - always changed
+      # - assign_id_idemp_check is not changed
+      - '"dhcp_options_id" in assign_id_idemp_check'
+      - assign_id_idemp_check.dhcp_options_id == minimal_create.dhcp_options_id
+      # FIXME - missing
+      # - '"new_options" in assign_id_idemp_check'
+      # - '"domain-name" in assign_id_idemp_check.new_options'
+      # - assign_id_idemp_check.new_options['domain-name'] == domain_a
+      # - '"domain-name-servers" in assign_id_idemp_check.new_options'
+      # - ( assign_id_idemp_check.new_options['domain-name-servers'] | sort ) == ( dns_servers_a_1 | sort )
+
+  - name: 'Reassign DHCP Options by ID - Idempotency'
+    ec2_vpc_dhcp_option:
+      dhcp_options_id: '{{ minimal_create.dhcp_options_id }}'
+      vpc_id: '{{ vpc_id_b }}'
+    register: assign_id_idemp
+  - assert:
+      that:
+      # FIXME - always changed
+      #- assign_id_idemp is not changed
+      - '"dhcp_options_id" in assign_id_idemp'
+      - assign_id_idemp.dhcp_options_id == minimal_create.dhcp_options_id
+      # FIXME - missing
+      # - '"new_options" in assign_id_idemp'
+      # - '"domain-name" in assign_id_idemp.new_options'
+      # - assign_id_idemp.new_options['domain-name'] == domain_a
+      # - '"domain-name-servers" in assign_id_idemp.new_options'
+      # - ( assign_id_idemp.new_options['domain-name-servers'] | sort ) == ( dns_servers_a_1 | sort )
+
+
+  # ----------------------------------------------
+  # Minimal Deletion
+
+    # DHCP Options can't be deleted if they're still associated with a VPC
+  - name: 'Reset the VPC A DHCP Options'
+    ec2_vpc_dhcp_option:
+      dhcp_options_id: '{{ original_dhcp_options_a }}'
+      vpc_id: '{{ vpc_id_a }}'
+    register: revert_a
+  - assert:
+      that:
+      - revert_a is changed
+
+  - name: 'Reset the VPC B DHCP Options'
+    ec2_vpc_dhcp_option:
+      dhcp_options_id: '{{ original_dhcp_options_b }}'
+      vpc_id: '{{ vpc_id_b }}'
+    register: revert_b
+  - assert:
+      that:
+      - revert_b is changed
+
+  - name: 'Delete DHCP Options - By ID (Check Mode)'
+    ec2_vpc_dhcp_option:
+      dhcp_options_id: '{{ minimal_create.dhcp_options_id }}'
+      state: absent
+    check_mode: yes
+    register: delete_id_check
+  - assert:
+      that:
+      - delete_id_check is changed
+    # FIXME - check always unchanged
+    ignore_errors: yes
+
+  - name: 'Delete DHCP Options - By ID'
+    ec2_vpc_dhcp_option:
+      dhcp_options_id: '{{ minimal_create.dhcp_options_id }}'
+      state: absent
+    register: delete_id
+  - assert:
+      that:
+      - delete_id is changed
+
+  - name: 'Delete DHCP Options - By ID - Idempotency (Check Mode)'
+    ec2_vpc_dhcp_option:
+      dhcp_options_id: '{{ minimal_create.dhcp_options_id }}'
+      state: absent
+    check_mode: yes
+    register: delete_id_idem_check
+  - assert:
+      that:
+      - delete_id_idem_check is not changed
+
+  - name: 'Delete DHCP Options - By ID - Idempotency'
+    ec2_vpc_dhcp_option:
+      dhcp_options_id: '{{ minimal_create.dhcp_options_id }}'
+      state: absent
+    register: delete_id_idem
+  - assert:
+      that:
+      - delete_id_idem is not changed
+
+  always:
+
+  ################################################
+  # TEARDOWN STARTS HERE
+  ################################################
+
+  # Delete the VPCs first, you can't delete DHCP Options that are in use
+  - name: 'Tidy up VPC A'
+    ec2_vpc_net:
+      name: '{{ vpc_name_a }}'
+      state: absent
+      cidr_block: '{{ vpc_cidr_a }}'
+    ignore_errors: True
+  - name: 'Tidy up VPC B'
+    ec2_vpc_net:
+      name: '{{ vpc_name_b }}'
+      state: absent
+      cidr_block: '{{ vpc_cidr_b }}'
+    ignore_errors: True
+
+  - name: 'Delete DHCP Options created'
+    ec2_vpc_dhcp_option:
+      dhcp_options_id: '{{ ( option | default({})).dhcp_options_id | default("dopt-00000000") }}'
+      state: absent
+    ignore_errors: True
+    loop_control:
+      loop_var: option
+    loop:
+    - '{{ minimal_create }}'
+    - '{{ minimal_create_b }}'
