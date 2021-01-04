@@ -406,7 +406,11 @@ def main():
         if params['delete_old'] and existing_options:
             remove_dhcp_options_by_id(connection, existing_options.id)
 
-    module.exit_json(changed=changed, new_options=new_options, dhcp_options_id=dhcp_option.id)
+    extra_params = {}
+    if dhcp_option:
+        extra_params['dhcp_options_id'] = dhcp_option.id
+
+    module.exit_json(changed=changed, new_options=new_options, **extra_params)
 
 
 if __name__ == "__main__":
