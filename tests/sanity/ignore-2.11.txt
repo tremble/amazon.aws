@@ -4,6 +4,5 @@ plugins/module_utils/cloudfront_facts.py pylint:unnecessary-comprehension  # New
 plugins/module_utils/cloud.py pylint:isinstance-second-argument-not-valid-type  # New test simple fix - https://github.com/ansible-collections/amazon.aws/pull/291
 plugins/module_utils/compat/_ipaddress.py no-assert  # Vendored library
 plugins/module_utils/compat/_ipaddress.py no-unicode-literals  # Vendored library
-plugins/module_utils/core.py pylint:property-with-parameters  # Breaking change required to fix - https://github.com/ansible-collections/amazon.aws/pull/290
 tests/utils/shippable/check_matrix.py replace-urlopen  # Standalone script used as part of testing
 tests/utils/shippable/timing.py shebang  # Standalone script used as part of testing
