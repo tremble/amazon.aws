@@ -8,6 +8,7 @@ pytest
 pytest-forked
 pytest-mock
 pytest-xdist
+pytest-ansible-units
 
 # Needed for ansible.utils.ipaddr in tests
 netaddr
