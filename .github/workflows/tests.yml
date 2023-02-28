@@ -12,15 +12,15 @@ on:  # yamllint disable-line rule:truthy
 
 jobs:
   ansible-lint:
-    uses: ansible-network/github_actions/.github/workflows/ansible-lint.yml@main
+    uses: tremble/ansible_github_actions/.github/workflows/ansible-lint.yml@devel/experimental
   changelog:
-    uses: ansible-network/github_actions/.github/workflows/changelog.yml@main
+    uses: tremble/ansible_github_actions/.github/workflows/changelog.yml@devel/experimental
   sanity:
-    uses: ansible-network/github_actions/.github/workflows/sanity.yml@main
+    uses: tremble/ansible_github_actions/.github/workflows/sanity.yml@devel/experimental
   unit-galaxy:
-    uses: ansible-network/github_actions/.github/workflows/unit_galaxy.yml@main
+    uses: tremble/ansible_github_actions/.github/workflows/unit_galaxy.yml@devel/experimental
   unit-source:
-    uses: ansible-network/github_actions/.github/workflows/unit_source.yml@main
+    uses: tremble/ansible_github_actions/.github/workflows/unit_source.yml@devel/experimental
     with:
       collection_pre_install: ''
   all_green:
