@@ -676,6 +676,7 @@ def create_bucket(s3_client, bucket_name, location):
     except is_boto3_error_code('BucketAlreadyOwnedByYou'):
         # We should never get here since we check the bucket presence before calling the create_or_update_bucket
         # method. However, the AWS Api sometimes fails to report bucket presence, so we catch this exception
+        # Comment
         return False
 
 
