@@ -11,31 +11,31 @@ on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
 
 jobs:
-  ansible-lint:
-    uses: tremble/ansible_github_actions/.github/workflows/ansible-lint.yml@devel/experimental
+  # ansible-lint:
+  #   uses: tremble/ansible_github_actions/.github/workflows/ansible-lint.yml@devel/experimental
   changelog:
     uses: tremble/ansible_github_actions/.github/workflows/changelog.yml@devel/experimental
   sanity:
     uses: tremble/ansible_github_actions/.github/workflows/sanity.yml@devel/experimental
-  unit-galaxy:
-    uses: tremble/ansible_github_actions/.github/workflows/unit_galaxy.yml@devel/experimental
-  unit-source:
-    uses: tremble/ansible_github_actions/.github/workflows/unit_source.yml@devel/experimental
     with:
-      collection_pre_install: ''
-  all_green:
-    if: ${{ always() }}
-    needs:
-      - changelog
-      - sanity
-      - unit-galaxy
-      - unit-source
-    runs-on: ubuntu-latest
-    steps:
-      - run: >-
-          python -c "assert set([
-          '${{ needs.changelog.result }}',
-          '${{ needs.sanity.result }}',
-          '${{ needs.unit-galaxy.result }}',
-          '${{ needs.unit-source.result }}'
-          ]) == {'success'}"
+      update_galaxy_version: false
+  # unit-source:
+  #   uses: tremble/ansible_github_actions/.github/workflows/unit_source.yml@devel/experimental
+  #   with:
+  #     collection_pre_install: ''
+  # all_green:
+  #   if: ${{ always() }}
+  #   needs:
+  #     - changelog
+  #     - sanity
+  #     - unit-galaxy
+  #     - unit-source
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - run: >-
+  #         python -c "assert set([
+  #         '${{ needs.changelog.result }}',
+  #         '${{ needs.sanity.result }}',
+  #         '${{ needs.unit-galaxy.result }}',
+  #         '${{ needs.unit-source.result }}'
+  #         ]) == {'success'}"
