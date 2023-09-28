@@ -5,18 +5,16 @@
 
 import pytest
 
+from ansible_collections.amazon.aws.plugins.module_utils.botocore import boto_exception
+from ansible_collections.amazon.aws.plugins.module_utils.retries import AWSRetry
+from ansible_collections.amazon.aws.plugins.module_utils.retries import RetryingBotoClientWrapper
+from ansible_collections.amazon.aws.plugins.modules import cloudformation as cfn_module
+
+# pylint: disable-next=unused-import
 # Magic...
 # pylint: disable-next=unused-import
 from ansible_collections.amazon.aws.tests.unit.utils.amazon_placebo_fixtures import maybe_sleep
-
-# pylint: disable-next=unused-import
 from ansible_collections.amazon.aws.tests.unit.utils.amazon_placebo_fixtures import placeboify
-
-from ansible_collections.amazon.aws.plugins.module_utils.botocore import boto_exception
-from ansible_collections.amazon.aws.plugins.module_utils.retries import RetryingBotoClientWrapper
-from ansible_collections.amazon.aws.plugins.module_utils.retries import AWSRetry
-
-from ansible_collections.amazon.aws.plugins.modules import cloudformation as cfn_module
 
 basic_yaml_tpl = """
 ---
