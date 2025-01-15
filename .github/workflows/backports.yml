@@ -16,7 +16,7 @@ on:
 
 jobs:
   changelog-labeller:
-    uses: ansible-network/github_actions/.github/workflows/backport-labeller.yml@main
+    uses: tremble/ansible_github_actions/.github/workflows/backport-labeller.yml@main
     with:
       label_minor_release: backport-9
       label_bugfix_release: backport-8
