@@ -9,7 +9,6 @@ from urllib.parse import urlparse
 
 try:
     from hashlib import md5
-
     HAS_MD5 = True
 except ImportError:
     HAS_MD5 = False
