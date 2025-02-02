@@ -38,10 +38,13 @@
         that:
           - upload_file_result is changed
           - upload_file_result is not failed
-          - upload_file_result.msg == "PUT operation skipped - running in check mode"
+          # - upload_file_result.msg == "PUT operation skipped - running in check mode"
           # Latest tests are returning <bucket_name>:PutObject -
           # Amazon probably changed something on us...
-          # - '"s3:PutObject" not in upload_file_result.resource_actions'
+          - '"s3:PutObject" not in upload_file_result.resource_actions'
+          - bucket_put not in upload_file_result.resource_actions
+      vars:
+        bucket_put: "{{ bucket_name }}-acl-disabled:PutObject"
 
     - name: Upload a file to the bucket
       amazon.aws.s3_object:
