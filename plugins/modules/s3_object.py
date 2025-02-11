@@ -597,9 +597,10 @@ def put_object_acl(module, s3, bucket, obj):
         )
 
 
-def create_dirkey(module, s3, bucket, obj, encrypt, expiry, metadata, acls_disabled):
+def create_dirkey(module, s3, bucket, obj, encrypt, expiry, metadata, acl_disabled):
     if module.check_mode:
         module.exit_json(msg="PUT operation skipped - running in check mode", changed=True)
+
     params = {"Bucket": bucket, "Key": obj, "Body": b""}
     params.update(
         get_extra_params(
@@ -610,7 +611,8 @@ def create_dirkey(module, s3, bucket, obj, encrypt, expiry, metadata, acls_disab
         )
     )
     s3.put_object(aws_retry=True, **params)
-    if not acls_disabled:
+
+    if not acl_disabled:
         put_object_acl(module, s3, bucket, obj, params)
 
     # Tags
@@ -710,30 +712,28 @@ def upload_s3file(
     s3: ClientType,
     bucket: str,
     obj: str,
-    metadata: dict,
-    encrypt: bool,
-    headers: dict,
-    source: Optional[str] = None,
+    s3_vars: dict,
     content: Optional[bytes] = None,
+    check_mode: bool = False,
 ):
-    if module.check_mode:
-        return
-
+    metadata = s3_vars["metadata"]
+    encrypt = s3_vars["encrypt"]
+    headers = s3_vars["headers"]
+    source = s3_vars["src"]
     extra = get_extra_params(
         encrypt,
         module.params.get("encryption_mode"),
         module.params.get("encryption_kms_key_id"),
         metadata,
     )
-    if module.params.get("permission"):
-        permissions = module.params["permission"]
-        if isinstance(permissions, str):
-            extra["ACL"] = permissions
-        elif isinstance(permissions, list):
-            extra["ACL"] = permissions[0]
+    if not s3_vars["acl_disabled"] and s3_vars["permission"]:
+        extra["ACL"] = s3_vars["permission"][0]
 
     if "ContentType" not in extra:
         extra["ContentType"] = guess_content_type(source)
+
+    if check_mode:
+        return
 
     if source:
         _upload_file(s3, Filename=source, Bucket=bucket, Key=obj, ExtraArgs=extra)
@@ -920,11 +920,12 @@ def do_upload_file(
     connection: ClientType,
     bucket: str,
     obj: str,
-    version: str,
-    source: str,
-    overwrite: str,
     s3_vars: dict,
 ) -> bool:
+    version = s3_vars["version"]
+    source = s3_vars["src"]
+    overwrite = s3_vars["overwrite"]
+
     if source is not None and not path_check(source):
         raise AnsibleS3Error(f"Local object {source} does not exist for PUT operation")
 
@@ -942,11 +943,9 @@ def do_upload_file(
         connection,
         bucket,
         obj,
-        s3_vars["metadata"],
-        s3_vars["encrypt"],
-        s3_vars["headers"],
-        source=source,
+        s3_vars,
         content=bincontent,
+        check_mode=module.check_mode,
     )
     return True
 
@@ -964,16 +963,17 @@ def s3_object_do_put(
 
     bucket = s3_vars["bucket"]
     obj = s3_vars["object"]
+    acl_disabled = s3_vars["acl_disabled"]
 
     # only use valid object acls for the upload_s3file function
-    if not s3_vars["acl_disabled"]:
-        s3_vars["permission"] = s3_vars["object_acl"]
+    if acl_disabled:
+        if s3_vars["permission"]:
+            module.warn(f'The bucket does not allow ACLs {s3_vars["permission"]} was requested')
+        s3_vars["permission"] = None
 
-    changed = do_upload_file(
-        module, connection, bucket, obj, s3_vars["version"], s3_vars["src"], s3_vars["overwrite"], s3_vars
-    )
+    changed = do_upload_file(module, connection, bucket, obj, s3_vars)
 
-    if not s3_vars["acl_disabled"]:
+    if not acl_disabled:
         put_object_acl(module, connection, bucket, obj)
 
     tags, tags_updated = ensure_tags(connection, module, bucket, obj)
@@ -1301,7 +1301,7 @@ def populate_params(module):
 
 def validate_bucket(module: AnsibleAWSModule, s3, var_dict: dict) -> dict:
     """
-    Checks for the existen
+    Checks for the existence of the bucket.
     """
     bucket_name = var_dict["bucket"]
     object_acl = var_dict["permission"]
@@ -1333,7 +1333,6 @@ def validate_bucket(module: AnsibleAWSModule, s3, var_dict: dict) -> dict:
         var_dict["acl_disabled"] = True
         return var_dict
 
-    var_dict["object_acl"] = list(object_acl)
     return var_dict
 
 
