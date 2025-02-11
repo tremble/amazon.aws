@@ -578,28 +578,26 @@ def delete_key(module, s3, bucket, obj):
         raise S3ObjectFailure(f"Failed while trying to delete {obj}.", e)
 
 
-def put_object_acl(module, s3, bucket, obj, params=None):
+@S3ErrorHandler.common_error_handler("set ACLs for object")
+@AWSRetry.jittered_backoff(max_delay=120)
+def _put_object_acl(module, s3, **params):
+    s3.put_object_acl(**params)
+
+
+def put_object_acl(module, s3, bucket, obj):
+    if module.check_mode:
+        return
     try:
-        if params:
-            s3.put_object(aws_retry=True, **params)
         for acl in module.params.get("permission"):
-            s3.put_object_acl(aws_retry=True, ACL=acl, Bucket=bucket, Key=obj)
-    except is_boto3_error_code(IGNORE_S3_DROP_IN_EXCEPTIONS):
+            _put_object_acl(module, s3, ACL=acl, Bucket=bucket, Key=obj)
+    except AnsibleS3SupportError as e:
         module.warn(
-            "PutObjectAcl is not implemented by your storage provider. Set the permissions parameters to the empty list"
-            " to avoid this warning"
+            "PutObjectAcl is not implemented by your storage provider."
+            " Set the permissions parameters to the empty list to avoid this warning"
         )
-    except is_boto3_error_code("AccessControlListNotSupported"):  # pylint: disable=duplicate-except
-        module.warn("PutObjectAcl operation : The bucket does not allow ACLs.")
-    except (
-        botocore.exceptions.BotoCoreError,
-        botocore.exceptions.ClientError,
-        boto3.exceptions.Boto3Error,
-    ) as e:  # pylint: disable=duplicate-except
-        raise S3ObjectFailure(f"Failed while creating object {obj}.", e)
 
 
-def create_dirkey(module, s3, bucket, obj, encrypt, expiry, metadata):
+def create_dirkey(module, s3, bucket, obj, encrypt, expiry, metadata, acls_disabled):
     if module.check_mode:
         module.exit_json(msg="PUT operation skipped - running in check mode", changed=True)
     params = {"Bucket": bucket, "Key": obj, "Body": b""}
@@ -611,7 +609,9 @@ def create_dirkey(module, s3, bucket, obj, encrypt, expiry, metadata):
             metadata,
         )
     )
-    put_object_acl(module, s3, bucket, obj, params)
+    s3.put_object(aws_retry=True, **params)
+    if not acls_disabled:
+        put_object_acl(module, s3, bucket, obj, params)
 
     # Tags
     tags, _changed = ensure_tags(s3, module, bucket, obj)
@@ -705,7 +705,6 @@ def _upload_fileobj(client: ClientType, **params) -> None:
     client.upload_fileobj(**params)
 
 
-# WIP
 def upload_s3file(
     module: AnsibleAWSModule,
     s3: ClientType,
@@ -714,9 +713,8 @@ def upload_s3file(
     metadata: dict,
     encrypt: bool,
     headers: dict,
-    src: Optional[str] = None,
+    source: Optional[str] = None,
     content: Optional[bytes] = None,
-    acl_disabled: bool = False,
 ):
     if module.check_mode:
         return
@@ -735,16 +733,13 @@ def upload_s3file(
             extra["ACL"] = permissions[0]
 
     if "ContentType" not in extra:
-        extra["ContentType"] = guess_content_type(src)
+        extra["ContentType"] = guess_content_type(source)
 
-    if src:
-        _upload_file(s3, Filename=src, Bucket=bucket, Key=obj, ExtraArgs=extra)
+    if source:
+        _upload_file(s3, Filename=source, Bucket=bucket, Key=obj, ExtraArgs=extra)
     else:
         f = io.BytesIO(cast(bytes, content))
         _upload_fileobj(s3, Fileobj=f, Bucket=bucket, Key=obj, ExtraArgs=extra)
-
-    if not acl_disabled:
-        put_object_acl(module, s3, bucket, obj)
 
 
 @S3ErrorHandler.common_error_handler("download")
@@ -920,6 +915,42 @@ def s3_object_do_get(module: AnsibleAWSModule, connection: ClientType, connectio
     module.exit_json(failed=False)
 
 
+def do_upload_file(
+    module: AnsibleAWSModule,
+    connection: ClientType,
+    bucket: str,
+    obj: str,
+    version: str,
+    source: str,
+    overwrite: str,
+    s3_vars: dict,
+) -> bool:
+    if source is not None and not path_check(source):
+        raise AnsibleS3Error(f"Local object {source} does not exist for PUT operation")
+
+    # the content will be uploaded as a byte string, so we must encode it first
+    bincontent = encode_binary_content(s3_vars)
+
+    if key_check(module, connection, bucket, obj, version, validate=s3_vars["validate"]) and overwrite != "always":
+        if overwrite == "never" or etag_compare(
+            module, connection, bucket, obj, version, local_file=source, content=bincontent
+        ):
+            return False
+
+    upload_s3file(
+        module,
+        connection,
+        bucket,
+        obj,
+        s3_vars["metadata"],
+        s3_vars["encrypt"],
+        s3_vars["headers"],
+        source=source,
+        content=bincontent,
+    )
+    return True
+
+
 def s3_object_do_put(
     module: AnsibleAWSModule, connection: ClientType, connection_v4: ClientType, s3_vars: dict
 ) -> NoReturn:
@@ -933,46 +964,22 @@ def s3_object_do_put(
 
     bucket = s3_vars["bucket"]
     obj = s3_vars["object"]
-    version = s3_vars["version"]
-    overwrite = s3_vars["overwrite"]
-    source = s3_vars["src"]
-    destination = s3_vars["dest"]
-
-    if s3_vars["src"] is not None and not path_check(s3_vars["src"]):
-        raise AnsibleS3Error(f'Local object {s3_vars["src"]} does not exist for PUT operation')
-
-    # the content will be uploaded as a byte string, so we must encode it first
-    bincontent = encode_binary_content(s3_vars)
-
-    if key_check(module, connection, bucket, obj, version, validate=s3_vars["validate"]) and overwrite != "always":
-        if overwrite == "never" or etag_compare(
-            module, connection, bucket, obj, version, local_file=source, content=bincontent
-        ):
-            tags, tags_updated = ensure_tags(connection, module, bucket, obj)
-            url = get_download_url(connection, s3_vars["bucket"], s3_vars["object"], s3_vars["expiry"])
-            module.exit_json(msg="Download url:", url=url, tags=tags, expiry=s3_vars["expiry"], changed=tags_updated)
 
     # only use valid object acls for the upload_s3file function
     if not s3_vars["acl_disabled"]:
         s3_vars["permission"] = s3_vars["object_acl"]
 
-    upload_s3file(
-        module,
-        connection,
-        s3_vars["bucket"],
-        s3_vars["object"],
-        s3_vars["metadata"],
-        s3_vars["encrypt"],
-        s3_vars["headers"],
-        src=s3_vars["src"],
-        content=bincontent,
-        acl_disabled=s3_vars["acl_disabled"],
+    changed = do_upload_file(
+        module, connection, bucket, obj, s3_vars["version"], s3_vars["src"], s3_vars["overwrite"], s3_vars
     )
 
-    # Tags
+    if not s3_vars["acl_disabled"]:
+        put_object_acl(module, connection, bucket, obj)
+
     tags, tags_updated = ensure_tags(connection, module, bucket, obj)
+    changed |= tags_updated
     url = put_download_url(connection, bucket, obj, s3_vars["expiry"])
-    module.exit_json(msg="PUT operation complete", url=url, tags=tags, changed=True)
+    module.exit_json(msg="PUT operation complete", url=url, tags=tags, changed=changed)
 
 
 def s3_object_do_delobj(module, connection, connection_v4, s3_vars):
@@ -1015,9 +1022,6 @@ def s3_object_do_create(module, connection, connection_v4, s3_vars):
             msg=f"Bucket {s3_vars['bucket']} and key {s3_vars['object']} already exists.",
             changed=False,
         )
-    if not s3_vars["acl_disabled"]:
-        # setting valid object acls for the create_dirkey function
-        s3_vars["permission"] = s3_vars["object_acl"]
     create_dirkey(
         module,
         connection,
@@ -1026,6 +1030,7 @@ def s3_object_do_create(module, connection, connection_v4, s3_vars):
         s3_vars["encrypt"],
         s3_vars["expiry"],
         s3_vars["metadata"],
+        s3_vars["acl_disabled"],
     )
 
 
@@ -1361,6 +1366,7 @@ def main():
         mode=dict(choices=valid_modes, required=True),
         sig_v4=dict(default=True, type="bool"),
         object=dict(),
+        # XXX We should default this to None, then apply "private" when creating if applicable
         permission=dict(type="list", elements="str", default=["private"], choices=valid_acls),
         version=dict(default=None),
         overwrite=dict(aliases=["force"], default="different"),
