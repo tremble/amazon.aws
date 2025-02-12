@@ -968,6 +968,10 @@ def s3_object_do_put(
     # only use valid object acls for the upload_s3file function
     if acl_disabled:
         if s3_vars["permission"]:
+            # XXX Better would be a default of None that we can check for, but it'll likely
+            # be a breaking change
+            if s3_vars["permission"] != ["private"]:
+                raise AnsibleS3SupportError(f'The bucket does not allow ACLs {s3_vars["permission"]} was requested')
             module.warn(f'The bucket does not allow ACLs {s3_vars["permission"]} was requested')
         s3_vars["permission"] = None
 
