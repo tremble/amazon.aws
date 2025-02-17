@@ -971,7 +971,13 @@ def s3_object_do_put(
             # XXX Better would be a default of None that we can check for, but it'll likely
             # be a breaking change
             if s3_vars["permission"] != ["private"]:
-                raise AnsibleS3SupportError(f'The bucket does not allow ACLs {s3_vars["permission"]} was requested')
+                module.deprecate(
+                    f'The bucket does not allow ACLs {s3_vars["permission"]} was requested,'
+                    " after release 10.0.0 this will be an error instead of a warning.",
+                    version="10.0.0",
+                    collection_name="amazon.aws",
+                )
+                # raise AnsibleS3SupportError(f'The bucket does not allow ACLs {s3_vars["permission"]} was requested')
             module.warn(f'The bucket does not allow ACLs {s3_vars["permission"]} was requested')
         s3_vars["permission"] = None
 
@@ -1419,7 +1425,7 @@ def main():
         module.deprecate(
             (
                 "Support for 'list' mode has been deprecated and will be removed in a release after "
-                "2024-11-01.  Please use the amazon.aws.s3_object_info module instead."
+                "2026-11-01.  Please use the amazon.aws.s3_object_info module instead."
             ),
             date="2026-11-01",
             collection_name="amazon.aws",
@@ -1434,7 +1440,7 @@ def main():
                 "Support for passing both the 'dualstack' and 'endpoint_url' parameters at the same "
                 "time has been deprecated."
             ),
-            date="2024-12-01",
+            version="10.0.0",
             collection_name="amazon.aws",
         )
         if "amazonaws.com" not in endpoint_url:
@@ -1446,7 +1452,7 @@ def main():
                 "Support for passing values of 'overwrite' other than 'always', 'never', "
                 "'different' or 'latest', has been deprecated."
             ),
-            date="2024-12-01",
+            version="10.0.0",
             collection_name="amazon.aws",
         )
 
