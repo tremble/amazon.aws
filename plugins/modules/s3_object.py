@@ -533,32 +533,14 @@ def is_local_object_latest(s3, bucket, obj, version=None, local_file=None):
 
 def bucket_check(module, s3, bucket, validate=True):
     try:
-        s3.head_bucket(aws_retry=True, Bucket=bucket)
-    except is_boto3_error_code("404") as e:
+        info = head_s3_bucket(s3, bucket)
+    except AnsibleS3PermissionsError as e:
         if validate:
-            raise S3ObjectFailure(
-                (
-                    f"Bucket '{bucket}' not found (during bucket_check).  "
-                    "Support for automatically creating buckets was removed in release 6.0.0.  "
-                    "The amazon.aws.s3_bucket module can be used to create buckets."
-                ),
-                e,
-            )
-    except is_boto3_error_code("403") as e:  # pylint: disable=duplicate-except
-        if validate:
-            raise S3ObjectFailure(
-                f"Permission denied accessing bucket '{bucket}' (during bucket_check).",
-                e,
-            )
-    except (
-        botocore.exceptions.BotoCoreError,
-        botocore.exceptions.ClientError,
-        boto3.exceptions.Boto3Error,
-    ) as e:  # pylint: disable=duplicate-except
-        raise S3ObjectFailure(
-            f"Failed while looking up bucket '{bucket}' (during bucket_check).",
-            e,
-        )
+            raise
+        module.warn(f"Permission denied accessing bucket '{bucket}' (during bucket_check).")
+
+    if validate and not info:
+        raise AnsibleS3Error(f"Bucket '{bucket}' not found (during bucket_check).")
 
 
 def delete_key(module, s3, bucket, obj):
