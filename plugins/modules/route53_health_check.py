@@ -319,6 +319,7 @@ from ansible.module_utils.common.dict_transformations import camel_dict_to_snake
 from ansible_collections.amazon.aws.plugins.module_utils.botocore import is_boto3_error_code
 from ansible_collections.amazon.aws.plugins.module_utils.modules import AnsibleAWSModule
 from ansible_collections.amazon.aws.plugins.module_utils.retries import AWSRetry
+from ansible_collections.amazon.aws.plugins.module_utils.route53 import AnsibleRoute53Error
 from ansible_collections.amazon.aws.plugins.module_utils.route53 import get_tags
 from ansible_collections.amazon.aws.plugins.module_utils.route53 import manage_tags
 
@@ -624,109 +625,118 @@ def main():
         supports_check_mode=True,
     )
 
-    if not module.params.get("health_check_id") and not module.params.get("type"):
-        module.fail_json(msg="parameter 'type' is required if not updating or deleting health check by ID.")
+    try:
+        if not module.params.get("health_check_id") and not module.params.get("type"):
+            module.fail_json(msg="parameter 'type' is required if not updating or deleting health check by ID.")
 
-    state_in = module.params.get("state")
-    ip_addr_in = module.params.get("ip_address")
-    port_in = module.params.get("port")
-    type_in = module.params.get("type")
-    fqdn_in = module.params.get("fqdn")
-    string_match_in = module.params.get("string_match")
-    request_interval_in = module.params.get("request_interval")
-    health_check_name = module.params.get("health_check_name")
-    tags = module.params.get("tags")
-    purge_tags = module.params.get("purge_tags")
-    child_health_checks_in = module.params.get("child_health_checks")
-    health_threshold_in = module.params.get("health_threshold")
+        state_in = module.params.get("state")
+        ip_addr_in = module.params.get("ip_address")
+        port_in = module.params.get("port")
+        type_in = module.params.get("type")
+        fqdn_in = module.params.get("fqdn")
+        string_match_in = module.params.get("string_match")
+        request_interval_in = module.params.get("request_interval")
+        health_check_name = module.params.get("health_check_name")
+        tags = module.params.get("tags")
+        purge_tags = module.params.get("purge_tags")
+        child_health_checks_in = module.params.get("child_health_checks")
+        health_threshold_in = module.params.get("health_threshold")
 
-    # Default port
-    if port_in is None:
-        if type_in in ["HTTP", "HTTP_STR_MATCH"]:
-            port_in = 80
-        elif type_in in ["HTTPS", "HTTPS_STR_MATCH"]:
-            port_in = 443
+        # Default port
+        if port_in is None:
+            if type_in in ["HTTP", "HTTP_STR_MATCH"]:
+                port_in = 80
+            elif type_in in ["HTTPS", "HTTPS_STR_MATCH"]:
+                port_in = 443
 
-    if string_match_in:
-        if type_in not in ["HTTP_STR_MATCH", "HTTPS_STR_MATCH"]:
-            module.fail_json(msg="parameter 'string_match' argument is only for the HTTP(S)_STR_MATCH types")
-        if len(string_match_in) > 255:
-            module.fail_json(msg="parameter 'string_match' is limited to 255 characters max")
+        if string_match_in:
+            if type_in not in ["HTTP_STR_MATCH", "HTTPS_STR_MATCH"]:
+                module.fail_json(msg="parameter 'string_match' argument is only for the HTTP(S)_STR_MATCH types")
+            if len(string_match_in) > 255:
+                module.fail_json(msg="parameter 'string_match' is limited to 255 characters max")
 
-    client = module.client("route53", retry_decorator=AWSRetry.jittered_backoff())
+        client = module.client("route53", retry_decorator=AWSRetry.jittered_backoff())
 
-    changed = False
-    action = None
-    check_id = None
-
-    # If update or delete Health Check based on ID
-    update_delete_by_id = False
-    if module.params.get("health_check_id"):
-        update_delete_by_id = True
-        id_to_update_delete = module.params.get("health_check_id")
-        try:
-            existing_check = client.get_health_check(HealthCheckId=id_to_update_delete)["HealthCheck"]
-        except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError):
-            module.exit_json(
-                changed=False, msg=f"The specified health check with ID: {id_to_update_delete} does not exist"
-            )
-    else:
-        existing_check = find_health_check(ip_addr_in, fqdn_in, type_in, request_interval_in, port_in)
-        if existing_check:
-            check_id = existing_check.get("Id")
-
-    # Delete Health Check
-    if state_in == "absent":
-        if update_delete_by_id:
-            changed, action = delete_health_check(id_to_update_delete)
-        else:
-            changed, action = delete_health_check(check_id)
+        changed = False
+        action = None
         check_id = None
 
-    # Create Health Check
-    elif state_in == "present":
-        if existing_check is None and not module.params.get("use_unique_names") and not update_delete_by_id:
-            changed, action, check_id = create_health_check(
-                ip_addr_in, fqdn_in, type_in, request_interval_in, port_in, child_health_checks_in, health_threshold_in
-            )
-
-        # Update Health Check
+        # If update or delete Health Check based on ID
+        update_delete_by_id = False
+        if module.params.get("health_check_id"):
+            update_delete_by_id = True
+            id_to_update_delete = module.params.get("health_check_id")
+            try:
+                existing_check = client.get_health_check(HealthCheckId=id_to_update_delete)["HealthCheck"]
+            except (botocore.exceptions.BotoCoreError, botocore.exceptions.ClientError):
+                module.exit_json(
+                    changed=False, msg=f"The specified health check with ID: {id_to_update_delete} does not exist"
+                )
         else:
-            # If health_check_name is a unique identifier
-            if module.params.get("use_unique_names"):
-                existing_checks_with_name = get_existing_checks_with_name()
-                if tags is None:
-                    purge_tags = False
-                    tags = {}
-                tags["Name"] = health_check_name
+            existing_check = find_health_check(ip_addr_in, fqdn_in, type_in, request_interval_in, port_in)
+            if existing_check:
+                check_id = existing_check.get("Id")
 
-                # update the health_check if another health check with same name exists
-                if health_check_name in existing_checks_with_name:
-                    changed, action, check_id = update_health_check(existing_checks_with_name[health_check_name])
-                else:
-                    # create a new health_check if another health check with same name does not exists
-                    changed, action, check_id = create_health_check(
-                        ip_addr_in,
-                        fqdn_in,
-                        type_in,
-                        request_interval_in,
-                        port_in,
-                        child_health_checks_in,
-                        health_threshold_in,
-                    )
-
+        # Delete Health Check
+        if state_in == "absent":
+            if update_delete_by_id:
+                changed, action = delete_health_check(id_to_update_delete)
             else:
-                changed, action, check_id = update_health_check(existing_check)
+                changed, action = delete_health_check(check_id)
+            check_id = None
 
-        if check_id:
-            changed |= manage_tags(module, client, "healthcheck", check_id, tags, purge_tags)
+        # Create Health Check
+        elif state_in == "present":
+            if existing_check is None and not module.params.get("use_unique_names") and not update_delete_by_id:
+                changed, action, check_id = create_health_check(
+                    ip_addr_in,
+                    fqdn_in,
+                    type_in,
+                    request_interval_in,
+                    port_in,
+                    child_health_checks_in,
+                    health_threshold_in,
+                )
 
-    health_check = describe_health_check(check_id)
-    health_check["action"] = action
-    module.exit_json(
-        changed=changed,
-        health_check=health_check,
-    )
+            # Update Health Check
+            else:
+                # If health_check_name is a unique identifier
+                if module.params.get("use_unique_names"):
+                    existing_checks_with_name = get_existing_checks_with_name()
+                    if tags is None:
+                        purge_tags = False
+                        tags = {}
+                    tags["Name"] = health_check_name
+
+                    # update the health_check if another health check with same name exists
+                    if health_check_name in existing_checks_with_name:
+                        changed, action, check_id = update_health_check(existing_checks_with_name[health_check_name])
+                    else:
+                        # create a new health_check if another health check with same name does not exists
+                        changed, action, check_id = create_health_check(
+                            ip_addr_in,
+                            fqdn_in,
+                            type_in,
+                            request_interval_in,
+                            port_in,
+                            child_health_checks_in,
+                            health_threshold_in,
+                        )
+
+                else:
+                    changed, action, check_id = update_health_check(existing_check)
+
+            if check_id:
+                changed |= manage_tags(module, client, "healthcheck", check_id, tags, purge_tags)
+
+        health_check = describe_health_check(check_id)
+        health_check["action"] = action
+        module.exit_json(
+            changed=changed,
+            health_check=health_check,
+        )
+    except AnsibleRoute53Error as e:
+        module.fail_json_aws_error(e)
 
 
 if __name__ == "__main__":
