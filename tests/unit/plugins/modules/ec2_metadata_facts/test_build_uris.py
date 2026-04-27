@@ -40,9 +40,25 @@ class TestBuildUrisFromEndpoint:
         endpoint = "http://169.254.169.254/"
         uris = ec2_metadata_facts.Ec2Metadata._build_uris_from_endpoint(endpoint)
 
-        # Should handle trailing slash gracefully (double slashes)
-        assert uris["token"] == "http://169.254.169.254//latest/api/token"
-        assert uris["meta"] == "http://169.254.169.254//latest/meta-data/"
+        # Trailing slash should be stripped to avoid double slashes
+        assert uris["token"] == "http://169.254.169.254/latest/api/token"
+        assert uris["meta"] == "http://169.254.169.254/latest/meta-data/"
+        assert uris["instance_tags"] == "http://169.254.169.254/latest/meta-data/tags/instance"
+        assert uris["ssh"] == "http://169.254.169.254/latest/meta-data/public-keys/0/openssh-key"
+        assert uris["user"] == "http://169.254.169.254/latest/user-data/"
+        assert uris["dynamic"] == "http://169.254.169.254/latest/dynamic/"
+
+    def test_build_uris_with_ipv6_endpoint(self):
+        """Test URI generation with IPv6 endpoint."""
+        endpoint = "http://[fd00:ec2::254]"
+        uris = ec2_metadata_facts.Ec2Metadata._build_uris_from_endpoint(endpoint)
+
+        assert uris["token"] == "http://[fd00:ec2::254]/latest/api/token"
+        assert uris["meta"] == "http://[fd00:ec2::254]/latest/meta-data/"
+        assert uris["instance_tags"] == "http://[fd00:ec2::254]/latest/meta-data/tags/instance"
+        assert uris["ssh"] == "http://[fd00:ec2::254]/latest/meta-data/public-keys/0/openssh-key"
+        assert uris["user"] == "http://[fd00:ec2::254]/latest/user-data/"
+        assert uris["dynamic"] == "http://[fd00:ec2::254]/latest/dynamic/"
 
 
 class TestEc2MetadataInit:

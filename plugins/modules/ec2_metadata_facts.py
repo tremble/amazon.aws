@@ -31,6 +31,13 @@ options:
         type: int
         default: 60
         version_added: 8.2.0
+    metadata_endpoint:
+        description:
+            - Override the metadata endpoint.
+            - This can be used to access the metadata over IPv6 by setting O(metadata_endpoint=http://[fd00:ec2::254]).
+            - Defaults to http://169.254.169.254
+        type: str
+        version_added: 11.3.0
 """
 
 EXAMPLES = r"""
@@ -486,6 +493,7 @@ class Ec2Metadata:
     @staticmethod
     def _build_uris_from_endpoint(endpoint):
         """Generate all metadata URIs from a base endpoint."""
+        endpoint = endpoint.rstrip("/")
         return {
             "token": "{}/latest/api/token".format(endpoint),
             "meta": "{}/latest/meta-data/".format(endpoint),
@@ -785,6 +793,7 @@ class Ec2Metadata:
 def main():
     argument_spec = dict(
         metadata_token_ttl_seconds=dict(required=False, default=60, type="int", no_log=False),
+        metadata_endpoint=dict(required=False, type="str"),
     )
 
     module = AnsibleModule(
@@ -793,12 +802,17 @@ def main():
     )
 
     metadata_token_ttl_seconds = module.params.get("metadata_token_ttl_seconds")
+    metadata_endpoint = module.params.get("metadata_endpoint")
 
     if metadata_token_ttl_seconds <= 0 or metadata_token_ttl_seconds > 21600:
         module.fail_json(msg="The option 'metadata_token_ttl_seconds' must be set to a value between 1 and 21600.")
 
     ec2_metadata_facts = Ec2Metadata(module).run()
-    ec2_metadata_facts_result = dict(changed=False, ansible_facts=ec2_metadata_facts)
+    ec2_metadata_facts_result = dict(
+        changed=False,
+        ansible_facts=ec2_metadata_facts,
+        metadata_endpoint=metadata_endpoint,
+    )
 
     module.exit_json(**ec2_metadata_facts_result)
 
