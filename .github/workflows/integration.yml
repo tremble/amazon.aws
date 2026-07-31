@@ -14,7 +14,7 @@ jobs:
     steps:
       - name: Retrieve pull request base ref
         id: retrieve-pr-info
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const pr = await github.rest.pulls.get({
@@ -48,31 +48,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the source collection (on issue comment)
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: "${{ env.amazon_dir }}"
           fetch-depth: 0
           ref: ${{ needs.retrieve-pr-info.outputs.head_ref }}
+          persist-credentials: false
         if: ${{ github.event_name == 'issue_comment' }}
 
       - name: Checkout the source collection (on other triggering method)
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: "${{ env.amazon_dir }}"
           fetch-depth: 0
+          persist-credentials: false
         if: ${{ github.event_name != 'issue_comment' }}
 
       - name: Checkout community.aws collection
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ansible-collections/community.aws
           path: "${{ env.community_dir }}"
           fetch-depth: 0
           ref: ${{ needs.retrieve-pr-info.outputs.base_ref }}
+          persist-credentials: false
 
       - name: list changes for pull request
         id: compute
-        uses: ansible/cloud-content-ci-automation/.github/actions/ansible_test_splitter@0b891487c4170ef856f02313c66cb1c776814c42
+        uses: ansible/cloud-content-ci-automation/.github/actions/ansible_test_splitter@6659b608aab58bf1d20641b805eb9cb4fd2b771f
         with:
           collections_to_test: "${{ env.amazon_dir}}, ${{ env.community_dir }}"
           total_jobs: 24
@@ -80,7 +83,7 @@ jobs:
 
   run-tests:
     needs:
-      - retrieve-pr-info 
+      - retrieve-pr-info
       - splitter
     permissions:
       pull-requests: read
@@ -89,41 +92,45 @@ jobs:
       community_dir: "./community_aws"
       all_targets: "${{ needs.splitter.outputs.targets }}"
       tarball_dir: "./tarballs"
-      ansible_version: milestone
+      ansible_version: stable-2.18
       python_version: 3.12
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      max-parallel: 8
       matrix:
         job-id: ${{ fromJson(needs.splitter.outputs.jobs) }}
     name: "${{ matrix.job-id }}"
     steps:
       - name: Checkout the source collection (on issue comment)
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: "${{ env.amazon_dir }}"
           fetch-depth: 0
           ref: ${{ needs.retrieve-pr-info.outputs.head_ref }}
+          persist-credentials: false
         if: ${{ github.event_name == 'issue_comment' }}
 
       - name: Checkout the source collection (on other triggering method)
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: "${{ env.amazon_dir }}"
           fetch-depth: 0
+          persist-credentials: false
         if: ${{ github.event_name != 'issue_comment' }}
 
       - name: Checkout community.aws collection
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ansible-collections/community.aws
           path: "${{ env.community_dir }}"
           fetch-depth: 0
           ref: ${{ needs.retrieve-pr-info.outputs.base_ref }}
+          persist-credentials: false
 
       - name: Read job targets
         id: read-targets
-        uses: ansible/cloud-content-ci-automation/.github/actions/ansible_read_targets@0b891487c4170ef856f02313c66cb1c776814c42
+        uses: ansible/cloud-content-ci-automation/.github/actions/ansible_read_targets@6659b608aab58bf1d20641b805eb9cb4fd2b771f
         with:
           job_id: "${{ matrix.job-id }}"
           all_targets: "${{ env.all_targets }}"
@@ -142,7 +149,7 @@ jobs:
       - uses: ansible/ansible-test-auth@008750a5bf07124c3ab86d30d73d7319d7518f36
 
       - name: Run integration tests
-        uses: ansible-community/ansible-test-gh-action@d3a8ec7a59694e25e210fcd44738910149537f0e
+        uses: ansible-community/ansible-test-gh-action@6ded727edb598e670ac056a8e680ca4050bac0a3
         with:
           ansible-core-version: ${{ env.ansible_version }}
           origin-python-version: ${{ env.python_version }}
