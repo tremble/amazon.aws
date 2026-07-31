@@ -48,27 +48,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the source collection (on issue comment)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: "${{ env.amazon_dir }}"
           fetch-depth: 0
           ref: ${{ needs.retrieve-pr-info.outputs.head_ref }}
+          persist-credentials: false
         if: ${{ github.event_name == 'issue_comment' }}
 
       - name: Checkout the source collection (on other triggering method)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: "${{ env.amazon_dir }}"
           fetch-depth: 0
+          persist-credentials: false
         if: ${{ github.event_name != 'issue_comment' }}
 
       - name: Checkout community.aws collection
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ansible-collections/community.aws
           path: "${{ env.community_dir }}"
           fetch-depth: 0
           ref: ${{ needs.retrieve-pr-info.outputs.base_ref }}
+          persist-credentials: false
 
       - name: list changes for pull request
         id: compute
@@ -100,27 +103,30 @@ jobs:
     name: "${{ matrix.job-id }}"
     steps:
       - name: Checkout the source collection (on issue comment)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: "${{ env.amazon_dir }}"
           fetch-depth: 0
           ref: ${{ needs.retrieve-pr-info.outputs.head_ref }}
+          persist-credentials: false
         if: ${{ github.event_name == 'issue_comment' }}
 
       - name: Checkout the source collection (on other triggering method)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: "${{ env.amazon_dir }}"
           fetch-depth: 0
+          persist-credentials: false
         if: ${{ github.event_name != 'issue_comment' }}
 
       - name: Checkout community.aws collection
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ansible-collections/community.aws
           path: "${{ env.community_dir }}"
           fetch-depth: 0
           ref: ${{ needs.retrieve-pr-info.outputs.base_ref }}
+          persist-credentials: false
 
       - name: Read job targets
         id: read-targets
